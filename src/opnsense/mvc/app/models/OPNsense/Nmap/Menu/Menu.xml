@@ -1,0 +1,7 @@
+<menu>
+    <Interfaces>
+        <Diagnostics>
+            <Nmap url="/ui/nmap" />
+        </Diagnostics>
+    </Interfaces>
+</menu>

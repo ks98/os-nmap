@@ -1,0 +1,38 @@
+<model>
+    <mount>//OPNsense/Nmap</mount>
+    <version>1.0.1</version>
+    <description>Nmap configuration</description>
+    <items>
+        <profiles>
+            <profile type="ArrayField">
+                <name type="TextField">
+                    <Required>Y</Required>
+                    <Mask>/^[^\n]+$/</Mask>
+                    <ValidationMessage>Name must be a single line.</ValidationMessage>
+                </name>
+                <description type="TextField">
+                    <Required>N</Required>
+                    <Mask>/^[^\n]*$/</Mask>
+                    <ValidationMessage>Description must be a single line.</ValidationMessage>
+                </description>
+                <args type="TextField">
+                    <Required>Y</Required>
+                    <Mask>/^[^\n]*$/</Mask>
+                    <ValidationMessage>Arguments must be a single line.</ValidationMessage>
+                </args>
+                <open_only type="BooleanField">
+                    <Default>0</Default>
+                </open_only>
+                <skip_discovery type="BooleanField">
+                    <Default>0</Default>
+                </skip_discovery>
+                <no_dns type="BooleanField">
+                    <Default>0</Default>
+                </no_dns>
+                <ipv6 type="BooleanField">
+                    <Default>0</Default>
+                </ipv6>
+            </profile>
+        </profiles>
+    </items>
+</model>

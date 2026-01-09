@@ -1,0 +1,56 @@
+<form>
+    <field>
+        <id>profile.name</id>
+        <label>Name</label>
+        <type>text</type>
+        <help>Short label shown in scan profile lists.</help>
+    </field>
+    <field>
+        <id>profile.description</id>
+        <label>Description</label>
+        <type>text</type>
+        <help>Optional details shown in dropdowns and tables.</help>
+    </field>
+    <field>
+        <id>profile.args</id>
+        <label>Arguments</label>
+        <type>text</type>
+        <help>Arguments passed to nmap (without target).</help>
+    </field>
+    <field>
+        <id>profile.open_only</id>
+        <label>Show only open ports</label>
+        <type>checkbox</type>
+        <help>Include only open ports in the results.</help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>profile.skip_discovery</id>
+        <label>Skip host discovery (treat hosts as up)</label>
+        <type>checkbox</type>
+        <help>Disable host discovery and assume targets are up.</help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>profile.no_dns</id>
+        <label>Disable DNS resolution</label>
+        <type>checkbox</type>
+        <help>Skip DNS lookups for targets.</help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>profile.ipv6</id>
+        <label>IPv6 scan (-6)</label>
+        <type>checkbox</type>
+        <help>Enable IPv6 scanning.</help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+</form>

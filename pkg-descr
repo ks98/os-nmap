@@ -1,0 +1,64 @@
+Nmap is a network exploration tool and security/port scanner.
+
+This plugin provides a simple WebUI to run safe, pre-defined Nmap scans
+from OPNsense.
+
+Plugin Changelog
+================
+
+1.13
+
+* Fix MAC/vendor parsing for host scans
+
+1.12
+
+* Hide loopback targets from interface scanning and add scan progress indicator
+
+1.11
+
+* Avoid auto-selecting oversized interface networks in host scans
+
+1.10
+
+* Fix host scan updates when profile labels contain spaces
+
+1.9
+
+* Add scan profile management and dynamic profile selection for scans
+
+1.8
+
+* Remove temporary debug output from interfaces endpoint
+
+1.7
+
+* Add MAC/vendor display and improved services formatting in Hosts table
+* Improve interface address lookup using physical interface names
+
+1.6
+
+* Fix interface enumeration using config children
+
+1.5
+
+* Add debug interface output for network discovery troubleshooting
+
+1.4
+
+* Improve interface address parsing for zone-indexed IPv6 and hex netmasks
+
+1.3
+
+* Harden interface address parsing for more configd output formats
+
+1.2
+
+* Fix interface network discovery using live interface addresses
+
+1.1
+
+* Add multi-tab UI with network scans, stored host results and custom commands
+
+1.0
+
+* Initial release

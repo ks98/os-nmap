@@ -1,0 +1,9 @@
+<acl>
+    <page-nmap>
+        <name>nmap</name>
+        <patterns>
+            <pattern>ui/nmap/*</pattern>
+            <pattern>api/nmap/*</pattern>
+        </patterns>
+    </page-nmap>
+</acl>

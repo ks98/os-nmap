@@ -1,0 +1,18 @@
+# Build artifacts
+/work/
+/README.list
+/README.temp
+
+# Packages
+/*.pkg
+
+# Temp files
+*.tmp
+*.log
+*.swp
+*.swo
+*.bak
+*~
+
+# OS files
+.DS_Store
