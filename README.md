@@ -36,5 +36,3 @@ etc.).
 - `src/opnsense/service/conf/actions.d/actions_nmap.conf`: configd action
 - `pkg-descr`: short description and changelog
 
-## License
-BSD 2-Clause (see copyright headers in the build scripts).
