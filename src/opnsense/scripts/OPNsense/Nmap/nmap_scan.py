@@ -22,6 +22,7 @@ PROFILE_OPTIONS = {
 }
 
 MAX_HOSTS = 1024
+SCAN_TIMEOUT = 3600
 RESULTS_PATH = "/var/db/nmap/scan_results.json"
 LOOPBACK_HOSTNAMES = {
     "localhost",
@@ -70,49 +71,61 @@ def is_loopback_target(target):
 
 def validate_target(target):
     if not target:
-        return None, "Target is required."
+        return None, "Target is required.", None
     if target.startswith("-"):
-        return None, "Invalid target value."
+        return None, "Invalid target value.", None
     if any(ch.isspace() for ch in target):
-        return None, "Target must not contain spaces."
+        return None, "Target must not contain spaces.", None
     if is_loopback_target(target):
-        return None, "Loopback targets are not allowed."
+        return None, "Loopback targets are not allowed.", None
     if "/" in target:
         addr, prefix = target.split("/", 1)
         if not prefix.isdigit():
-            return None, "Invalid CIDR prefix."
+            return None, "Invalid CIDR prefix.", None
         try:
             ip = ipaddress.ip_address(addr)
         except ValueError:
-            return None, "Invalid IP address."
+            return None, "Invalid IP address.", None
         prefix_len = int(prefix)
         max_prefix = 32 if ip.version == 4 else 128
         if prefix_len < 0 or prefix_len > max_prefix:
-            return None, "Invalid CIDR prefix length."
+            return None, "Invalid CIDR prefix length.", None
         network = ipaddress.ip_network(target, strict=False)
+        warning = None
         if network.num_addresses > MAX_HOSTS:
-            return None, f"Network too large (max {MAX_HOSTS} hosts)."
-        return ip.version, None
+            warning = (
+                "Warning: target {target} expands to {network} "
+                "({hosts} hosts), recommended max is {limit}."
+            ).format(
+                target=target,
+                network=network.with_prefixlen,
+                hosts=network.num_addresses,
+                limit=MAX_HOSTS,
+            )
+        return ip.version, None, warning
     try:
         ip = ipaddress.ip_address(target)
-        return ip.version, None
+        return ip.version, None, None
     except ValueError:
         if is_valid_hostname(target):
-            return 0, None
-    return None, "Invalid target value."
+            return 0, None, None
+    return None, "Invalid target value.", None
 
 
 def validate_targets_list(targets_value):
     targets = [t for t in targets_value.split(",") if t]
     if not targets:
-        return None, "No targets supplied."
+        return None, None, "No targets supplied."
     versions = set()
+    warnings = []
     for target in targets:
-        version, error = validate_target(target)
+        version, error, warning = validate_target(target)
         if error is not None:
-            return None, error
+            return None, None, error
         versions.add(version)
-    return targets, None
+        if warning:
+            warnings.append(warning)
+    return targets, warnings, None
 
 
 def decode_custom_args(payload):
@@ -142,7 +155,7 @@ def run_command(cmd):
             cmd,
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=SCAN_TIMEOUT,
         )
     except subprocess.TimeoutExpired:
         return None
@@ -150,7 +163,7 @@ def run_command(cmd):
 
 def collect_output(result):
     if result is None:
-        return "Scan timed out after 600 seconds."
+        return f"Scan timed out after {SCAN_TIMEOUT} seconds."
     output = ""
     if result.stdout:
         output += result.stdout
@@ -257,10 +270,13 @@ def main():
         print(collect_output(result))
         return 0 if result is not None and result.returncode == 0 else 1
 
-    targets, error = validate_targets_list(args.targets)
+    targets, warnings, error = validate_targets_list(args.targets)
     if error is not None:
         print(error)
         return 1
+    if warnings:
+        for warning in warnings:
+            print(warning)
 
     cmd = ["/usr/local/bin/nmap"]
     if custom_args:
@@ -290,7 +306,7 @@ def main():
     cmd.extend(targets)
     result = run_command(cmd)
     if result is None:
-        print("Scan timed out after 600 seconds.")
+        print(f"Scan timed out after {SCAN_TIMEOUT} seconds.")
         return 1
 
     try:
@@ -306,6 +322,7 @@ def main():
         "targets": targets,
         "hosts": hosts,
         "stderr": result.stderr.strip() if result.stderr else "",
+        "warnings": warnings or [],
     }
 
     write_results(data)

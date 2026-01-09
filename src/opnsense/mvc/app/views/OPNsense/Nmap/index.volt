@@ -478,6 +478,7 @@ $(function() {
 
     function renderHosts(data) {
         var hosts = data['hosts'] || [];
+        var warnings = data && Array.isArray(data.warnings) ? data.warnings : [];
         var rows = "";
         hosts.forEach(function(host) {
             rows += "<tr>" +
@@ -504,6 +505,9 @@ $(function() {
             infoText += "{{ lang._('No results recorded yet.') }}";
         } else {
             infoText += " | {{ lang._('Results') }}: " + hosts.length;
+        }
+        if (warnings.length) {
+            infoText = warnings.join(" | ") + (infoText ? " | " + infoText : "");
         }
         if (infoText !== "") {
             $("#hostsInfo").text(infoText).removeClass("hidden");

@@ -6,6 +6,13 @@ from OPNsense.
 Plugin Changelog
 ================
 
+1.14
+
+* Allow scanning large networks with warnings instead of blocking
+* Show scan size warnings in interface scan results
+* Fix configd action invocation for scans
+* Increase scan timeout to 3600 seconds for long-running scans
+
 1.13
 
 * Fix MAC/vendor parsing for host scans
