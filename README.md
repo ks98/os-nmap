@@ -3,6 +3,8 @@
 This repository contains the OPNsense plugin "os-nmap". It provides a WebUI
 to run safe, pre-defined Nmap scans and custom commands.
 
+<img width="550" alt="image" src="https://github.com/user-attachments/assets/68b1d0b8-89dc-4774-9263-7f5156ae2dec" />
+
 ## Features
 - Quick Scan and interface scans from the UI
 - Scan profiles with editable arguments
