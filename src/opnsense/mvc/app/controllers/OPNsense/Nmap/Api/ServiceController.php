@@ -10,6 +10,7 @@ use OPNsense\Nmap\Nmap;
 class ServiceController extends ApiControllerBase
 {
     private const RESULTS_PATH = '/var/db/nmap/scan_results.json';
+    private const STATUS_PATH = '/var/db/nmap/scan_status.json';
     private const LOOPBACK_HOSTNAMES = array(
         'localhost',
         'localhost.localdomain',
@@ -402,11 +403,12 @@ class ServiceController extends ApiControllerBase
         return $interfaces;
     }
 
-    private function runScan($mode, $targets, $profile, $open_only, $no_dns, $skip_discovery, $ipv6, $custom_args)
+    private function runScan($mode, $targets, $profile, $open_only, $no_dns, $skip_discovery, $ipv6, $custom_args, $background = false)
     {
         $backend = new Backend();
         $custom_b64 = $custom_args === '' ? '' : base64_encode($custom_args);
-        return $backend->configdpRun('nmap scan', array(
+        $action = $background ? 'nmap scan_background' : 'nmap scan';
+        return $backend->configdpRun($action, array(
             $mode,
             $targets,
             $profile,
@@ -425,6 +427,10 @@ class ServiceController extends ApiControllerBase
 
     public function resultsAction()
     {
+        $data = array(
+            'generated_at' => null,
+            'hosts' => array(),
+        );
         if (is_file(self::RESULTS_PATH)) {
             $raw = file_get_contents(self::RESULTS_PATH);
             $data = json_decode($raw, true);
@@ -435,13 +441,52 @@ class ServiceController extends ApiControllerBase
                         $data['profile'] = $resolved['name'];
                     }
                 }
-                return $data;
+            } else {
+                $data = array(
+                    'generated_at' => null,
+                    'hosts' => array(),
+                );
             }
         }
-        return array(
-            'generated_at' => null,
-            'hosts' => array(),
-        );
+        $status = $this->readScanStatus();
+        if ($status !== null) {
+            if (!empty($status['profile'])) {
+                $resolved = $this->resolveProfile($status['profile']);
+                if ($resolved !== null) {
+                    $status['profile'] = $resolved['name'];
+                }
+            }
+            $data['scan_status'] = $status;
+        }
+        return $data;
+    }
+
+    public function statusAction()
+    {
+        $status = $this->readScanStatus();
+        if ($status !== null && !empty($status['profile'])) {
+            $resolved = $this->resolveProfile($status['profile']);
+            if ($resolved !== null) {
+                $status['profile'] = $resolved['name'];
+            }
+        }
+        return array('scan_status' => $status);
+    }
+
+    public function cancelscanAction()
+    {
+        if (!$this->request->isPost()) {
+            return array("message" => "Unable to cancel scan", "cancelled" => false);
+        }
+
+        $pid = trim((string)$this->request->getPost('pid'));
+        if ($pid === '' || !ctype_digit($pid)) {
+            return array("message" => "Invalid PID", "cancelled" => false);
+        }
+
+        $backend = new Backend();
+        $output = $backend->configdpRun('nmap cancel', array($pid));
+        return array("output" => $output);
     }
 
     public function clearresultsAction()
@@ -513,7 +558,8 @@ class ServiceController extends ApiControllerBase
             $no_dns,
             $skip_discovery,
             $ipv6,
-            $profile['args']
+            $profile['args'],
+            true
         );
         return array("output" => $output);
     }
@@ -570,9 +616,23 @@ class ServiceController extends ApiControllerBase
             $no_dns,
             $skip_discovery,
             $ipv6,
-            $profile['args']
+            $profile['args'],
+            true
         );
         return array("output" => $output);
+    }
+
+    private function readScanStatus()
+    {
+        if (!is_file(self::STATUS_PATH)) {
+            return null;
+        }
+        $raw = file_get_contents(self::STATUS_PATH);
+        if ($raw === false) {
+            return null;
+        }
+        $data = json_decode($raw, true);
+        return is_array($data) ? $data : null;
     }
 
     public function scancustomAction()
@@ -591,7 +651,7 @@ class ServiceController extends ApiControllerBase
             return array("message" => "Loopback targets are not allowed");
         }
 
-        $output = $this->runScan('custom', $target, 'custom', '0', '0', '0', '0', $custom_args);
+        $output = $this->runScan('custom', $target, 'custom', '0', '0', '0', '0', $custom_args, true);
         return array("output" => $output);
     }
 }

@@ -2,6 +2,7 @@
     <li class="active"><a data-toggle="tab" href="#scan">{{ lang._('Scan') }}</a></li>
     <li><a data-toggle="tab" href="#hosts">{{ lang._('Interfaces') }}</a></li>
     <li><a data-toggle="tab" href="#custom">{{ lang._('Custom') }}</a></li>
+    <li><a data-toggle="tab" href="#running">{{ lang._('Running Scans') }}</a></li>
     <li><a data-toggle="tab" href="#profiles">{{ lang._('Scan Profiles') }}</a></li>
 </ul>
 
@@ -144,6 +145,26 @@
         <pre class="hidden" id="customOutput"></pre>
     </div>
 
+    <div id="running" class="tab-pane fade in">
+        <div class="content-box tab-content table-responsive">
+            <table class="table table-striped __nomb" id="running_table">
+                <thead>
+                    <tr>
+                        <th style="width:15%">{{ lang._('Type') }}</th>
+                        <th style="width:18%">{{ lang._('Profile') }}</th>
+                        <th>{{ lang._('Targets') }}</th>
+                        <th style="width:16%">{{ lang._('Started') }}</th>
+                        <th style="width:10%">{{ lang._('PID') }}</th>
+                        <th style="width:12%">{{ lang._('Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <div class="alert alert-info hidden" id="runningInfo"></div>
+            <input type="button" class="btn btn-default" value="{{ lang._('Refresh') }}" id="runningRefresh" />
+        </div>
+    </div>
+
     <div id="profiles" class="tab-pane fade in">
         <div class="content-box">
             {{ partial('layout_partials/base_bootgrid_table', profileGrid + {'command_width': '150'}) }}
@@ -178,10 +199,19 @@ $(function() {
     }
 
     function updateHostsInfo(text) {
-        if (!text) {
-            return;
+        if (text) {
+            $("#hostsInfo").text(text).removeClass("hidden");
+        } else {
+            $("#hostsInfo").addClass("hidden");
         }
-        $("#hostsInfo").text(text).removeClass("hidden");
+    }
+
+    function updateRunningInfo(text) {
+        if (text) {
+            $("#runningInfo").text(text).removeClass("hidden");
+        } else {
+            $("#runningInfo").addClass("hidden");
+        }
     }
 
     function buildExportFilename(extension, data) {
@@ -319,13 +349,22 @@ $(function() {
     }
 
     var progressTimers = {};
+    var progressRunning = {};
+    var resultsPoller = null;
+    var statusPoller = null;
+    var scanRunning = { "scan": false, "hosts": false, "custom": false };
 
     function updateProgress(prefix, value) {
         var bar = $("#" + prefix + "_progress_bar");
         if (!bar.length) {
             return;
         }
-        bar.css("width", value + "%").attr("aria-valuenow", value).text(value + "%");
+        var shownValue = value;
+        if (progressRunning[prefix] && value >= 95) {
+            shownValue = 95;
+        }
+        var label = shownValue + "%";
+        bar.css("width", shownValue + "%").attr("aria-valuenow", shownValue).text(label);
     }
 
     function startProgress(prefix) {
@@ -337,6 +376,7 @@ $(function() {
         if (progressTimers[prefix]) {
             clearInterval(progressTimers[prefix]);
         }
+        progressRunning[prefix] = true;
         updateProgress(prefix, 0);
         container.removeClass("hidden");
         bar.addClass("progress-bar-striped active");
@@ -358,11 +398,138 @@ $(function() {
             clearInterval(progressTimers[prefix]);
             progressTimers[prefix] = null;
         }
+        progressRunning[prefix] = false;
         updateProgress(prefix, 100);
         bar.removeClass("progress-bar-striped active");
         setTimeout(function() {
             container.addClass("hidden");
         }, 1200);
+    }
+
+    function setScanRunning(prefix, running) {
+        var nextValue = Boolean(running);
+        if (scanRunning[prefix] === nextValue) {
+            return;
+        }
+        scanRunning[prefix] = nextValue;
+        $("#" + prefix + "Act").prop("disabled", scanRunning[prefix]);
+        if (scanRunning[prefix]) {
+            $("#" + prefix + "Act_progress").addClass("fa fa-spinner fa-pulse");
+            startProgress(prefix);
+        } else {
+            $("#" + prefix + "Act_progress").removeClass("fa fa-spinner fa-pulse");
+            stopProgress(prefix);
+        }
+    }
+
+    function modeToPrefix(mode) {
+        if (mode === "simple") {
+            return "scan";
+        }
+        if (mode === "custom") {
+            return "custom";
+        }
+        if (mode === "hosts") {
+            return "hosts";
+        }
+        return null;
+    }
+
+    function anyScanRunning() {
+        return scanRunning.scan || scanRunning.hosts || scanRunning.custom;
+    }
+
+    function fetchStatus(callback) {
+        ajaxCall("/api/nmap/service/status", {}, function(data, status) {
+            var scanStatus = data && data.scan_status ? data.scan_status : null;
+            callback(scanStatus);
+        });
+    }
+
+    function startStatusPolling() {
+        if (statusPoller) {
+            return;
+        }
+        statusPoller = setInterval(function() {
+            fetchStatus(function(status) {
+                applyScanStatus(status);
+            });
+        }, 4000);
+    }
+
+    function stopStatusPolling() {
+        if (!statusPoller) {
+            return;
+        }
+        clearInterval(statusPoller);
+        statusPoller = null;
+    }
+
+    function toggleResultsPolling(status) {
+        var runningHosts = status && status.running && status.mode === "hosts";
+        if (runningHosts) {
+            if (!resultsPoller) {
+                resultsPoller = setInterval(function() {
+                    fetchResults(function(data) {
+                        renderHosts(data);
+                    });
+                }, 4000);
+            }
+        } else if (resultsPoller) {
+            clearInterval(resultsPoller);
+            resultsPoller = null;
+        }
+    }
+
+    function formatRunningMessage(status) {
+        var text = "{{ lang._('Scan running in background.') }}";
+        if (status && status.started_at) {
+            text += " " + new Date(status.started_at).toLocaleString();
+        }
+        return text;
+    }
+
+    function updateOutputsFromStatus(status) {
+        if (!status) {
+            return;
+        }
+        var prefix = modeToPrefix(status.mode);
+        if (prefix !== "scan" && prefix !== "custom") {
+            return;
+        }
+        var target = prefix === "scan" ? "#scanOutput" : "#customOutput";
+        if (status.running) {
+            updateOutput(target, formatRunningMessage(status));
+            return;
+        }
+        var text = "";
+        if (status.output) {
+            text = status.output;
+            if (status.output_truncated) {
+                text += "\n{{ lang._('Output truncated.') }}";
+            }
+        } else if (status.message) {
+            text = status.message;
+        }
+        if (text) {
+            updateOutput(target, text);
+        }
+    }
+
+    function applyScanStatus(status) {
+        var runningPrefix = status && status.running ? modeToPrefix(status.mode) : null;
+        ["scan", "hosts", "custom"].forEach(function(prefix) {
+            setScanRunning(prefix, runningPrefix === prefix);
+        });
+        if (status && status.running) {
+            startStatusPolling();
+        } else {
+            stopStatusPolling();
+        }
+        toggleResultsPolling(status);
+        updateOutputsFromStatus(status);
+        renderRunningScans(status);
+        updateRunningInfo(status && status.message ? status.message : "");
     }
 
     function profileLabel(profile) {
@@ -476,9 +643,61 @@ $(function() {
         }).join("");
     }
 
+    function modeLabel(mode) {
+        if (mode === "simple") {
+            return "{{ lang._('Quick Scan') }}";
+        }
+        if (mode === "hosts") {
+            return "{{ lang._('Interface Scan') }}";
+        }
+        if (mode === "custom") {
+            return "{{ lang._('Custom Scan') }}";
+        }
+        return mode || "";
+    }
+
+    function formatTargets(targets) {
+        if (Array.isArray(targets)) {
+            return targets.join(", ");
+        }
+        return targets || "";
+    }
+
+    function renderRunningScans(status) {
+        var tableBody = $("#running_table tbody");
+        if (!tableBody.length) {
+            return;
+        }
+        var rows = "";
+        if (status && status.running) {
+            var mode = modeLabel(status.mode);
+            var profile = status.profile || "";
+            var targets = formatTargets(status.targets);
+            var started = status.started_at ? new Date(status.started_at).toLocaleString() : "";
+            var pid = status.pid ? String(status.pid) : "";
+            rows += "<tr>" +
+                "<td>" + escapeHtml(mode) + "</td>" +
+                "<td>" + escapeHtml(profile) + "</td>" +
+                "<td>" + escapeHtml(targets) + "</td>" +
+                "<td>" + escapeHtml(started) + "</td>" +
+                "<td>" + escapeHtml(pid) + "</td>" +
+                "<td><button type=\"button\" class=\"btn btn-danger btn-xs nmap-cancel\" data-pid=\"" +
+                escapeHtml(pid) + "\">" + "{{ lang._('Cancel') }}" + "</button></td>" +
+                "</tr>";
+        } else {
+            rows = "<tr><td colspan=\"6\" class=\"text-muted\">" +
+                "{{ lang._('No scans running.') }}" + "</td></tr>";
+        }
+        tableBody.html(rows);
+    }
+
     function renderHosts(data) {
         var hosts = data['hosts'] || [];
-        var warnings = data && Array.isArray(data.warnings) ? data.warnings : [];
+        var status = data && data.scan_status && data.scan_status.mode === "hosts" ? data.scan_status : null;
+        var warnings = data && Array.isArray(data.warnings) ? data.warnings.slice() : [];
+        if (warnings.length === 0 && status && Array.isArray(status.warnings)) {
+            warnings = status.warnings;
+        }
         var rows = "";
         hosts.forEach(function(host) {
             rows += "<tr>" +
@@ -493,18 +712,34 @@ $(function() {
         $("#hosts_table tbody").html(rows);
 
         var infoText = "";
+        var statusText = "";
+        if (status && status.running) {
+            statusText = "{{ lang._('Scan running') }}";
+            if (status.started_at) {
+                statusText += ": " + new Date(status.started_at).toLocaleString();
+            }
+        } else if (status && status.message) {
+            statusText = status.message;
+        }
+        var profileText = data['profile'] || "";
+        if (status && status.running && status.profile) {
+            profileText = status.profile;
+        }
         if (data['generated_at']) {
             var dt = new Date(data['generated_at']);
             infoText = "{{ lang._('Last scan') }}: " + dt.toLocaleString();
         }
-        if (data['profile']) {
-            infoText += " | {{ lang._('Profile') }}: " + data['profile'];
+        if (profileText) {
+            infoText += " | {{ lang._('Profile') }}: " + profileText;
         }
         if (hosts.length === 0) {
             infoText = infoText ? infoText + " | " : "";
             infoText += "{{ lang._('No results recorded yet.') }}";
         } else {
             infoText += " | {{ lang._('Results') }}: " + hosts.length;
+        }
+        if (statusText) {
+            infoText = statusText + (infoText ? " | " + infoText : "");
         }
         if (warnings.length) {
             infoText = warnings.join(" | ") + (infoText ? " | " + infoText : "");
@@ -524,6 +759,7 @@ $(function() {
     function loadResults() {
         fetchResults(function(data) {
             renderHosts(data);
+            applyScanStatus(data && data.scan_status ? data.scan_status : null);
         });
     }
 
@@ -555,6 +791,30 @@ $(function() {
         $(".nmap-interface").prop("checked", checked);
     });
 
+    $("#runningRefresh").click(function() {
+        fetchStatus(function(status) {
+            applyScanStatus(status);
+        });
+    });
+
+    $(document).on("click", ".nmap-cancel", function() {
+        var pid = $(this).data("pid");
+        if (!pid) {
+            return;
+        }
+        if (!confirm("{{ lang._('Cancel running scan?') }}")) {
+            return;
+        }
+        updateRunningInfo("{{ lang._('Cancelling scan...') }}");
+        ajaxCall("/api/nmap/service/cancelscan", { "pid": pid }, function(data, status) {
+            updateRunningInfo(data['output'] || data['message'] || "");
+            fetchStatus(function(scanStatus) {
+                applyScanStatus(scanStatus);
+            });
+            loadResults();
+        });
+    });
+
     $("#scanAct").click(function() {
         var target = $.trim($("#scan_target").val());
         var profile = $("#scan_profile").val();
@@ -566,15 +826,22 @@ $(function() {
             updateOutput("#scanOutput", "{{ lang._('Profile is required.') }}");
             return;
         }
-        $("#scanAct_progress").addClass("fa fa-spinner fa-pulse");
-        startProgress("scan");
+        if (anyScanRunning()) {
+            updateOutput("#scanOutput", "{{ lang._('Another scan is already running. Please cancel it first.') }}");
+            return;
+        }
+        setScanRunning("scan", true);
+        updateOutput("#scanOutput", "{{ lang._('Scan starting in background...') }}");
         ajaxCall("/api/nmap/service/scan", {
             "target": target,
             "profile": profile
         }, function(data, status) {
-            updateOutput("#scanOutput", data['output'] || data['message'] || "");
-            $("#scanAct_progress").removeClass("fa fa-spinner fa-pulse");
-            stopProgress("scan");
+            if (data['output'] || data['message']) {
+                updateOutput("#scanOutput", data['output'] || data['message'] || "");
+            }
+            fetchStatus(function(scanStatus) {
+                applyScanStatus(scanStatus);
+            });
         });
     });
 
@@ -592,14 +859,16 @@ $(function() {
             updateHostsInfo("{{ lang._('Profile is required.') }}");
             return;
         }
-        $("#hostsAct_progress").addClass("fa fa-spinner fa-pulse");
-        startProgress("hosts");
+        if (anyScanRunning()) {
+            updateHostsInfo("{{ lang._('Another scan is already running. Please cancel it first.') }}");
+            return;
+        }
+        setScanRunning("hosts", true);
+        updateHostsInfo("{{ lang._('Scan starting in background...') }}");
         ajaxCall("/api/nmap/service/scanhosts", {
             "targets": targets.join(","),
             "profile": profile
         }, function(data, status) {
-            $("#hostsAct_progress").removeClass("fa fa-spinner fa-pulse");
-            stopProgress("hosts");
             if (data['output']) {
                 updateHostsInfo(data['output']);
             } else if (data['message']) {
@@ -642,15 +911,22 @@ $(function() {
             updateOutput("#customOutput", "{{ lang._('Target is required.') }}");
             return;
         }
-        $("#customAct_progress").addClass("fa fa-spinner fa-pulse");
-        startProgress("custom");
+        if (anyScanRunning()) {
+            updateOutput("#customOutput", "{{ lang._('Another scan is already running. Please cancel it first.') }}");
+            return;
+        }
+        setScanRunning("custom", true);
+        updateOutput("#customOutput", "{{ lang._('Scan starting in background...') }}");
         ajaxCall("/api/nmap/service/scancustom", {
             "target": target,
             "custom_args": $("#custom_args").val()
         }, function(data, status) {
-            updateOutput("#customOutput", data['output'] || data['message'] || "");
-            $("#customAct_progress").removeClass("fa fa-spinner fa-pulse");
-            stopProgress("custom");
+            if (data['output'] || data['message']) {
+                updateOutput("#customOutput", data['output'] || data['message'] || "");
+            }
+            fetchStatus(function(scanStatus) {
+                applyScanStatus(scanStatus);
+            });
         });
     });
 

@@ -1,5 +1,5 @@
 PLUGIN_NAME=		nmap
-PLUGIN_VERSION=		1.14
+PLUGIN_VERSION=		1.26
 PLUGIN_COMMENT=		Nmap network scanner WebUI
 PLUGIN_DEPENDS=		nmap
 PLUGIN_WWW=		https://nmap.org/

@@ -6,6 +6,60 @@ from OPNsense.
 Plugin Changelog
 ================
 
+1.26
+
+* Simplify scan progress display to a basic running indicator
+* Remove live Nmap progress parsing
+
+1.25
+
+* Attach stderr to the pseudo-tty and parse XML output from a temp file
+
+1.24
+
+* Attach Nmap stdin/stdout to a pseudo-tty to enable live stats output
+
+1.23
+
+* Stream Nmap output in unbuffered chunks to capture progress updates
+
+1.22
+
+* Fix progress detection for Nmap "% done" stats lines
+
+1.21
+
+* Force unbuffered progress capture via pseudo-tty
+
+1.20
+
+* Parse progress output even when Nmap uses carriage returns
+
+1.19
+
+* Improve progress parsing for Nmap stats output
+
+1.18
+
+* Use Nmap stats output to show real scan progress
+* Display progress in running scan status
+
+1.17
+
+* Add running scans tab with cancel action
+* Report when another scan is active before starting a new one
+
+1.16
+
+* Run quick and custom scans in the background to avoid WebUI timeouts
+* Show background scan status/output for all scan types
+* Extend scan timeout to 10 hours for long-running scans
+
+1.15
+
+* Run interface (host) scans in the background to avoid WebUI timeouts
+* Track scan status and show running/last status in the interface results
+
 1.14
 
 * Allow scanning large networks with warnings instead of blocking
